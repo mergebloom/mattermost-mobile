@@ -1,7 +1,7 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React, {useCallback, useMemo} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {useIntl} from 'react-intl';
 import {type LayoutChangeEvent, Platform, ScrollView, View} from 'react-native';
 import {useAnimatedReaction} from 'react-native-reanimated';
@@ -27,6 +27,7 @@ import QuickActions from '../quick_actions';
 import SendAction from '../send_button';
 import Typing from '../typing';
 import Uploads from '../uploads';
+import VoiceMessage from '../voice_message/voice_message';
 
 import Header from './header';
 
@@ -152,6 +153,7 @@ function DraftInput({
     const isTablet = useIsTablet();
     const currentScreen = useCurrentScreen();
     const [layoutHeight, setLayoutHeight] = React.useState(0);
+    const [pendingVoiceMessage, setPendingVoiceMessage] = useState<string>();
     const {bottom} = useSafeAreaInsets();
     const {inputRef, stateContext, blurAndDismissKeyboard} = useKeyboardState();
 
@@ -209,6 +211,21 @@ function DraftInput({
         CallbackStore.setCallback<((schedulingInfo: SchedulingInfo) => Promise<void | {data?: boolean; error?: unknown}>)>(handleSendMessage);
         navigateToScreen(Screens.SCHEDULED_POST_OPTIONS);
     }, [blurAndDismissKeyboard, handleSendMessage, scheduledPostsEnabled]);
+
+    const handleVoiceMessage = useCallback((clientId: string) => {
+        setPendingVoiceMessage(clientId);
+    }, []);
+
+    useEffect(() => {
+        if (!pendingVoiceMessage) {
+            return;
+        }
+        const uploadedVoiceMessage = files.find((file) => file.clientId === pendingVoiceMessage && file.id);
+        if (uploadedVoiceMessage) {
+            setPendingVoiceMessage(undefined);
+            handleSendMessage();
+        }
+    }, [files, handleSendMessage, pendingVoiceMessage]);
 
     const sendActionDisabled = !canSend || noMentionsError;
     useAnimatedReaction(
@@ -285,13 +302,22 @@ function DraftInput({
                             focus={focus}
                             location={location}
                         />
-                        <SendAction
-                            testID={sendActionTestID}
-                            disabled={sendActionDisabled}
-                            sendMessage={handleSendMessage}
-                            showScheduledPostOptions={handleShowScheduledPostOptions}
-                            scheduledPostEnabled={scheduledPostsEnabled}
-                        />
+                        {value.length === 0 && files.length === 0 ? (
+                            <VoiceMessage
+                                channelId={channelId}
+                                rootId={rootId}
+                                addFiles={addFiles}
+                                sendMessage={handleVoiceMessage}
+                            />
+                        ) : (
+                            <SendAction
+                                testID={sendActionTestID}
+                                disabled={sendActionDisabled}
+                                sendMessage={handleSendMessage}
+                                showScheduledPostOptions={handleShowScheduledPostOptions}
+                                scheduledPostEnabled={scheduledPostsEnabled}
+                            />
+                        )}
                     </View>
                 </ScrollView>
             </SafeAreaView>
